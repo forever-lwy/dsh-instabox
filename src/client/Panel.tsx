@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ACTIONS, defaultConfig, type Action, type ActionRequest, type ControlView, type JobView, type SettingsView } from '../shared.js'
 import { base64ToBytes, bytesToBase64, listOf, machineIdOf, pretty, viewerUrl, waitForJob, type InstaboxFace } from './face.js'
 import { InstaboxSettings } from './Settings.js'
+import { Resources } from './Resources.js'
 
 type Run = (action: Action, input?: Record<string, unknown>, machineId?: string, quiet?: boolean) => Promise<any>
 type Field = {key: string; label: string; type?: 'text'|'number'|'textarea'|'checkbox'|'json'; value?: string|number|boolean; required?: boolean; options?: string[]; min?: number; max?: number; hint?: string}
@@ -110,7 +111,9 @@ function Desktop({run, machineId, ownerId, control, setControl}: {run: Run; mach
         <button type="button" onClick={() => { const pending = document.fullscreenElement ? document.exitFullscreen?.() : viewer.current?.requestFullscreen?.(); if (pending) void pending.catch(reason => setError(reason instanceof Error ? reason.message : '无法全屏')); else setError('当前浏览器未提供全屏功能。') }}>全屏</button>
         {mine && <button type="button" onClick={release} disabled={busy}>交还</button>}
         <button type="button" onClick={() => setUrl('')}>隐藏画面</button></div></div>
-      <iframe title={viewerMode === 'control' ? 'Instabox 人工接管桌面' : 'Instabox 只读桌面'} src={url} allow="clipboard-read; clipboard-write; fullscreen" allowFullScreen referrerPolicy="no-referrer"/>
+      {/* Official viewer reads #token only at document mount. Changing src's
+          fragment alone keeps its old read-only session alive in a browser. */}
+      <iframe key={`${machineId}:${viewerMode}:${url}`} title={viewerMode === 'control' ? 'Instabox 人工接管桌面' : 'Instabox 只读桌面'} src={url} allow="clipboard-read; clipboard-write; fullscreen" allowFullScreen referrerPolicy="no-referrer"/>
     </div> : <div className="dsi-view dsi-empty" style={{color:'#ddd'}}><InstaboxIcon/><p>{pendingCleanup ? '桌面接管待清理，交互画面已关闭。' : '打开桌面观看或接管；机器须处于运行状态。'}</p><small>本版组织 Key 支持截图和模型工具；人工键鼠接管与实时桌面需使用创建机器的个人 Key。</small></div>}
     {image && <div className="dsi-card dsi-shot"><div className="dsi-actions"><h3>最新截图</h3>
       <label className="dsi-check"><input type="checkbox" checked={clickScreenshot} disabled={!mine} onChange={event => setClickScreenshot(event.target.checked)}/>点击截图发送鼠标点击</label>
@@ -211,7 +214,7 @@ function Advanced({run,machineId}: {run:Run;machineId:string}) {
 export function InstaboxPanel({face,closePanel}: {face:InstaboxFace;closePanel?:()=>void}) {
   const [settings,setSettings]=useState<SettingsView|null>(null),[machines,setMachines]=useState<any[]>([]),[machineId,setMachineId]=useState('')
   const [tab,setTab]=useState('desktop'),[create,setCreate]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true)
-  const [control,setControl]=useState<ControlView|null>(null),[history,setHistory]=useState<JobView[]>([]),[resource,setResource]=useState<unknown>()
+  const [control,setControl]=useState<ControlView|null>(null),[history,setHistory]=useState<JobView[]>([])
   const ownerId=useRef(id()).current, lifetime=useRef<AbortController|null>(null),faceRef=useRef(face),machineRef=useRef(machineId),controlRef=useRef(control)
   faceRef.current=face;machineRef.current=machineId;controlRef.current=control
   const updateJob=useCallback((job:JobView)=>{if(!lifetime.current?.signal.aborted)setHistory(previous=>[job,...previous.filter(item=>item.jobId!==job.jobId)].slice(0,24))},[])
@@ -283,8 +286,7 @@ export function InstaboxPanel({face,closePanel}: {face:InstaboxFace;closePanel?:
         {tab==='files'&&<Files run={run}/>}
         {tab==='snapshots'&&<Snapshots run={run} refreshMachines={refresh} machineId={machineId}/>}
         {tab==='network'&&<Network run={run}/>}
-        {tab==='resources'&&<div className="dsi-stack"><div className="dsi-card"><h3>账户与机器资源</h3><div className="dsi-actions">{[['account.me','账户'],['account.usage','账户用量'],['templates.list','可用模板'],['machines.get','机器详情'],['machines.disk','磁盘空间'],['metrics.get','CPU / 内存'],['usage.get','机器用量'],['machines.logs','机器日志']].map(([action,label])=><button type="button" key={action} disabled={!machineId&&!action.startsWith('account.')&&action!=='templates.list'} onClick={()=>void run(action as Action).then(setResource).catch(reason=>setError(String(reason)))}>{label}</button>)}</div>{resource!==undefined&&<pre>{pretty(resource)}</pre>}</div>
-          <ActionCard title="调整机器规格与磁盘" description="受套餐限制。缩小磁盘或调整 CPU / 内存通常需要先关机。" action="machines.update" run={run} disabled={!machineId} fields={[{key:'vcpus',label:'vCPU',type:'number',min:1,max:32},{key:'memMiB',label:'内存 MiB',type:'number',min:1024,max:65536},{key:'persistentDiskGiB',label:'持久盘 GiB',type:'number',min:1,max:1024},{key:'autoSuspendAfterSeconds',label:'空闲暂停（秒）',type:'number',min:0,max:1800},{key:'metadata',label:'替换标签 JSON',type:'json'}]} onResult={()=>void refresh()}/>
+        {tab==='resources'&&<div className="dsi-stack"><Resources run={run} machineId={machineId} onUpdated={refresh}/>
           <ActionCard title="复制当前机器" action="machines.fork" run={run} disabled={!machineId} fields={[{key:'name',label:'新机器名称'},{key:'metadata',label:'标签 JSON',type:'json'}]} onResult={()=>void refresh()}/></div>}
         {tab==='advanced'&&<Advanced run={run} machineId={machineId}/>}
       </div>}

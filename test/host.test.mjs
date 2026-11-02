@@ -65,6 +65,34 @@ test('takeover aborts active model input, blocks queued/future mutation, leaves 
   assert.deepEqual(fixture.calls.slice(0, 3).map(call=>call.action), ['desktop.start','desktop.takeover','desktop.view'])
 })
 
+test('Host replaces the opaque watch token with a newly minted interactive hash token and preserves it across renewal', async t=>{
+  const calls=[]
+  const pathname=`https://dashboard.instabox.sh/desktop/${id}`
+  const runtime=new InstaboxRuntime(async()=>({async execute(request){
+    calls.push(structuredClone(request))
+    if(request.action==='desktop.view') return {url:`${pathname}#${request.input.viewOnly?'synthetic-watch-token':'synthetic-interactive-token'}`,expiresAt:'2026-11-02T13:00:00Z'}
+    return {controller:'human',yours:true}
+  }}))
+  t.after(()=>runtime.dispose())
+  // The official viewer reads its hash token on initial mount. These opaque
+  // synthetic values deliberately use the same path and differ only in hash;
+  // this checks Host mode/token propagation, not browser or VNC mouse input.
+  const watch=await done(runtime,'desktop.view','human',{viewOnly:true,ttlSeconds:600})
+  const take=await done(runtime,'control.take','human',{ownerId})
+  assert.equal(watch.status,'succeeded')
+  assert.equal(take.status,'succeeded')
+  assert.equal(new URL(watch.result.url).pathname,new URL(take.result.url).pathname)
+  assert.notEqual(new URL(watch.result.url).hash,new URL(take.result.url).hash)
+  assert.equal(new URL(take.result.url).hash,'#synthetic-interactive-token')
+  assert.deepEqual(calls.filter(call=>call.action==='desktop.view').map(call=>call.input),[
+    {viewOnly:true,ttlSeconds:600},{viewOnly:false,ttlSeconds:600},
+  ])
+  const renewed=await done(runtime,'control.renew','human',{ownerId})
+  assert.equal(renewed.result.url,take.result.url)
+  assert.equal(calls.filter(call=>call.action==='desktop.view').length,2)
+  assert.equal(calls.at(-1).action,'desktop.status')
+})
+
 test('invalid owner and machine aliases fail before jobs are accepted, avoiding canonical-ID takeover bypass', async t => {
   const fixture = apiFixture()
   const runtime = new InstaboxRuntime(async () => fixture.api)

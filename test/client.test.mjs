@@ -23,8 +23,8 @@ async function mount(t,component=Panel,overrides={}){
   const face={read:async()=>settings(),save:async request=>{saves.push(request);return{...settings(),config:request.config,revision:4}},
     execute:async request=>{calls.push(request);let value={};if(request.action==='machines.list')value={machines:[{id:'m_one',name:'first',state:'running'},{id:'m_two',name:'second',state:'stopped'}]};
       if(request.action==='control.status'||request.action==='control.release')value={machineId:request.machineId,mode:'agent'};
-      if(request.action==='control.take'||request.action==='control.renew')value={machineId:request.machineId,mode:'human',ownerId:request.input.ownerId,expiresAt:Date.now()+120000,url:'https://dashboard.instabox.sh/desktop/view?token=test'};
-      if(request.action==='desktop.view')value={url:'https://dashboard.instabox.sh/desktop/view?token=readonly',expiresAt:Date.now()+600000};
+      if(request.action==='control.take'||request.action==='control.renew')value={machineId:request.machineId,mode:'human',ownerId:request.input.ownerId,expiresAt:Date.now()+120000,url:`https://dashboard.instabox.sh/desktop/${request.machineId}#token=interactive`};
+      if(request.action==='desktop.view')value={url:`https://dashboard.instabox.sh/desktop/${request.machineId}#token=readonly`,expiresAt:Date.now()+600000};
       if(request.action==='desktop.screenshot')value={mimeType:'image/png',base64:'iVBORw0KGgo='};return job(request.action,value)},getJob:async()=>{throw new Error('Unexpected poll')},...overrides}
   const flush=action=>React.act(async()=>{action?.()})
   await flush(()=>root.render(React.createElement(component,{face})))
@@ -70,6 +70,29 @@ test('view-only desktop never acquires control and handback removes interactive 
   await ui.click('[data-action=take-control]');await ui.click('[data-action=release-control]')
   assert.equal(ui.container.querySelector('iframe'),null)
   assert.ok(ui.calls.some(call=>call.action==='control.release'))
+})
+
+test('hash-only viewer token changes remount the iframe instead of retaining read-only document state',async t=>{
+  const ui=await mount(t)
+  const view=[...ui.container.querySelectorAll('button')].find(node=>node.textContent==='查看桌面')
+  await ui.flush(()=>view.click())
+  const readonlyFrame=ui.container.querySelector('iframe')
+  const readonlyUrl=new URL(readonlyFrame.src)
+  assert.equal(readonlyUrl.hash,'#token=readonly')
+  await ui.click('[data-action=take-control]')
+  const interactiveFrame=ui.container.querySelector('iframe')
+  const interactiveUrl=new URL(interactiveFrame.src)
+  assert.equal(interactiveUrl.pathname,readonlyUrl.pathname)
+  assert.equal(interactiveUrl.search,readonlyUrl.search)
+  assert.equal(interactiveUrl.hash,'#token=interactive')
+  assert.notEqual(interactiveFrame,readonlyFrame,'official viewer reads the hash only on initial mount; a fresh document is required')
+  assert.equal(readonlyFrame.isConnected,false)
+  assert.equal(interactiveFrame.title,'Instabox 人工接管桌面')
+  const frameWindow=interactiveFrame.contentWindow
+  await ui.click('[data-action=release-control]')
+  assert.equal(interactiveFrame.isConnected,false)
+  assert.equal(ui.container.querySelector('iframe'),null)
+  assert.ok(frameWindow)
 })
 
 test('failed renewal hides the interactive desktop while preserving the Host human lock',async t=>{
@@ -145,6 +168,35 @@ test('advanced input rejects invalid JSON before creating a cloud job',async t=>
   await ui.change('[data-field=advanced-input]','[1,2]')
   const count=ui.calls.length;await ui.flush(()=>Simulate.submit(ui.container.querySelector('form')))
   assert.equal(ui.calls.length,count);assert.match(ui.container.querySelector('[role=alert]').textContent,/JSON 对象/)
+})
+
+test('the integrated resources panel reads current machine values and submits only the edited disk field',async t=>{
+  const requests=[]
+  let disk=20
+  const ui=await mount(t,Panel,{execute:async request=>{
+    requests.push(request)
+    let value={}
+    if(request.action==='machines.list')value={machines:[{id:'m_one',name:'first',state:'running'}]}
+    if(request.action==='control.status'||request.action==='control.release')value={machineId:request.machineId,mode:'agent'}
+    if(request.action==='machines.get')value={id:request.machineId,name:'first',state:'running',spec:{vcpus:4,memMiB:8192,persistentDiskGiB:disk},autoSuspendAfterSeconds:1800}
+    if(request.action==='machines.update'){disk=request.input.persistentDiskGiB;value={ok:true}}
+    if(request.action==='account.usage')value={machines:1,snapshots:2,storedBytes:5*1024**3,limits:{maxMachines:1,maxSnapshots:5,maxStoredGiB:200}}
+    if(request.action==='metrics.get')value={metrics:[{cpuUsedPct:12,memUsed:2*1024**3,memTotal:8*1024**3}]}
+    return job(request.action,value)
+  }})
+  await ui.click('[data-tab=resources]')
+  assert.equal(ui.container.querySelector('[data-spec=vcpus]').value,'4')
+  assert.equal(ui.container.querySelector('[data-spec=memMiB]').value,'8192')
+  assert.equal(ui.container.querySelector('[data-spec=persistentDiskGiB]').value,'20')
+  assert.match(ui.container.querySelector('[data-resource=metrics]').textContent,/12%/)
+  assert.match(ui.container.querySelector('[data-resource=quota]').textContent,/机器配额/)
+  assert.ok(requests.some(request=>request.action==='account.usage'&&request.machineId===undefined))
+  await ui.change('[data-spec=persistentDiskGiB]','60')
+  await ui.click('[data-action=save-specification]')
+  const update=requests.find(request=>request.action==='machines.update')
+  assert.equal(update.machineId,'m_one')
+  assert.deepEqual(update.input,{persistentDiskGiB:60})
+  assert.equal(ui.container.querySelector('[data-spec=persistentDiskGiB]').value,'60')
 })
 
 test('viewer validates scheme and official host; binary transfers preserve every byte',()=>{
