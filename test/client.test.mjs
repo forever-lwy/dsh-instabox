@@ -46,6 +46,16 @@ test('credentials remain write-only and settings save keeps revision then clears
   assert.equal(field.value,'');assert.ok(!ui.container.textContent.includes('ibk_private_test'));assert.equal(window.localStorage.length,0)
 })
 
+test('desktop placement is selectable and persisted together with the existing settings revision',async t=>{
+  const ui=await mount(t,Settings)
+  assert.equal(ui.container.querySelector('[data-setting=desktopPlacement]').value,'inline')
+  await ui.change('[data-setting=desktopPlacement]','sidebar')
+  await ui.click('[data-action=save-settings]')
+  assert.equal(ui.saves[0].config.desktopPlacement,'sidebar')
+  assert.equal(ui.saves[0].expectedRevision,3)
+  assert.equal(ui.container.querySelector('[data-setting=desktopPlacement]').value,'sidebar')
+})
+
 test('manual takeover returns interactive iframe and machine switch releases the same owner lease',async t=>{
   const ui=await mount(t)
   assert.equal(ui.container.querySelector('[aria-label="当前机器"]').value,'m_one')

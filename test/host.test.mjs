@@ -324,7 +324,7 @@ test('real Cordis service keeps credential values out of settings/disk, enforces
   const service=new InstaboxService(ctx,store,{apiFactory:async()=>({execute:async request=>{calls.push(request);return {ok:true}}})})
   t.after(async()=>{await ctx.fiber.dispose();await rm(dir,{recursive:true,force:true})})
   assert.equal(ctx.instabox.current().defaultTemplate,'agent-browser')
-  assert.deepEqual(remoteMethods(service).map(row=>row.method).sort(),['execute','getJob','getSettings','saveSettings'])
+  assert.deepEqual(remoteMethods(service).map(row=>row.method).sort(),['execute','getActivity','getJob','getSettings','saveSettings'])
   const initial=await service.getSettings({},signal())
   const secret='ibk_synthetic_test_123456'
   const saved=await service.saveSettings({config:initial.config,expectedRevision:0,apiKey:secret},signal())

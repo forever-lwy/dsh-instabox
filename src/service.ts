@@ -1,22 +1,36 @@
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { InstaboxApi } from './api.js'
-import { actionSchema, getJobSchema, saveSettingsSchema, type ActionRequest, type ConfigData, type JobView, type SaveSettingsRequest, type SettingsView } from './shared.js'
+import { actionSchema, activityRequestSchema, getJobSchema, saveSettingsSchema, type ActionRequest, type ActivityView, type ConfigData, type JobView, type SaveSettingsRequest, type SettingsView } from './shared.js'
 import { ConfigConflict, ConfigStore } from './store.js'
 import { ControlLeaseStore } from './control-store.js'
 import { dirname, join } from 'node:path'
 import { InstaboxRuntime, RuntimeError, safeError, type ApiPort } from './runtime.js'
+import { ActivityTracker } from './activity.js'
 
 declare module '@deepseek-ai/cordis' { interface Context { instabox: InstaboxService } }
 export interface ServiceOptions { apiFactory?: () => Promise<ApiPort> }
 export class InstaboxService extends TypertRemoteService {
   readonly runtime: InstaboxRuntime
+  readonly activity = new ActivityTracker()
+  private activityJobs = new Map<string, {request: ActionRequest; token?: string}>()
+  private activityDisposed = false
   private saves: Promise<unknown> = Promise.resolve()
   constructor(ctx: Context, readonly store: ConfigStore, options: ServiceOptions = {}) {
     super(ctx, 'instabox')
     this.runtime = new InstaboxRuntime(options.apiFactory ?? (() => this.createApi()), Date.now, {journal: new ControlLeaseStore(join(dirname(store.path), 'control-leases.json'))})
     ctx.effect(() => () => this.runtime.dispose(), 'instabox: jobs and desktop leases')
+    const timer = setInterval(() => this.sweepActivityJobs(), 250)
+    timer.unref?.()
+    ctx.effect(() => () => {this.activityDisposed=true;clearInterval(timer);this.activityJobs.clear();this.activity.dispose()}, 'instabox: session activity')
+    ctx.on('agent/status', ({agent,status}) => this.activity.setRunning(String(agent.session.id), status === 'running'))
+    ctx.on('agent/disposed', ({agent}) => this.activity.setRunning(String(agent.session.id), false))
+    ctx.on('session/event', (session,event) => {
+      if(event.type==='turn/start')this.activity.beginTurn(String(session.id))
+      else if(event.type==='turn/end')this.activity.setRunning(String(session.id),false)
+    })
   }
   current(): ConfigData { return this.store.current() }
   private async createApi(): Promise<ApiPort> {
@@ -76,7 +90,11 @@ export class InstaboxService extends TypertRemoteService {
   }
   @Remote
   async execute(request: ActionRequest, signal: AbortSignal): Promise<JobView> {
-    try { return await this.runtime.submit(request, 'human', signal, 0) }
+    try {
+      const job=await this.runtime.submit(request, 'human', signal, 0)
+      this.watchActivityJob(request,job)
+      return job
+    }
     catch (error) { throw new RemoteError('gateway/bad-request', safeError(error), {}) }
   }
   @Remote
@@ -87,13 +105,48 @@ export class InstaboxService extends TypertRemoteService {
     try { return this.runtime.getJob(parsed.data.jobId) }
     catch (error) { throw new RemoteError('gateway/bad-request', safeError(error), {}) }
   }
-  async executeAgent(request: ActionRequest, signal: AbortSignal): Promise<JobView> {
+  @Remote({resources:{session:(request:{sessionId:string})=>SessionId(request.sessionId)}})
+  async getActivity(request: {sessionId:string}, signal: AbortSignal): Promise<ActivityView> {
+    signal.throwIfAborted()
+    const parsed=activityRequestSchema.safeParse(request)
+    if(!parsed.success)throw new RemoteError('gateway/bad-request','会话标识无效。',{})
+    this.sweepActivityJobs()
+    return this.activity.snapshot(parsed.data.sessionId)
+  }
+  async executeAgent(request: ActionRequest, signal: AbortSignal, sessionId?: string, running?: boolean): Promise<JobView> {
     signal.throwIfAborted()
     if (!this.current().modelToolsEnabled) throw new RuntimeError('Instabox 模型工具已在设置中关闭。', 'model_tools_disabled')
     const parsed = actionSchema.parse(request)
     if (parsed.action === 'machines.create' && !parsed.input?.templateId && !parsed.input?.snapshotId) {
       parsed.input = {...parsed.input, templateId: this.current().defaultTemplate}
     }
-    return this.runtime.submit(parsed, 'agent', signal, 8000)
+    const token=this.activity.begin(sessionId,parsed,running)
+    try {
+      const job=await this.runtime.submit(parsed, 'agent', signal, 8000)
+      this.watchActivityJob(parsed,job,token)
+      return job
+    } catch(error) {this.activity.finish(token);throw error}
+  }
+  private watchActivityJob(request: ActionRequest, job: JobView, token?: string): void {
+    if(this.activityDisposed)return
+    const stateObservation=['machines.list','machines.get','machines.create','machines.fork','machines.update','machines.start','machines.resume','machines.suspend','machines.stop','machines.delete','jobs.list','jobs.get','jobs.kill'].includes(request.action)
+    if(!token && !stateObservation)return
+    // Retain only the action and machine identity. In particular, a long file
+    // transfer must not make this observer keep a second copy of file bytes,
+    // shell commands, URLs or credentials from request.input.
+    const metadata:ActionRequest={action:request.action,...(request.machineId?{machineId:request.machineId}:{})}
+    if(['queued','running'].includes(job.status))this.activityJobs.set(job.jobId,{request:metadata,...(token?{token}:{})})
+    else {this.activity.finish(token,job);this.activity.observe(metadata,job)}
+  }
+  private sweepActivityJobs(): void {
+    if(this.activityDisposed)return
+    for(const[jobId,entry]of this.activityJobs){
+      try {
+        const job=this.runtime.getJob(jobId)
+        if(['queued','running'].includes(job.status))continue
+        this.activityJobs.delete(jobId)
+        this.activity.finish(entry.token,job);this.activity.observe(entry.request,job)
+      }catch{this.activityJobs.delete(jobId);this.activity.finish(entry.token)}
+    }
   }
 }

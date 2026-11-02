@@ -60,6 +60,11 @@ export function InstaboxSettings({face, openPanel, onSaved}: {face: InstaboxFace
               onChange={event => setDraft({...draft, requestTimeoutMs: Number(event.target.value)})}/><small>长操作在插件后台执行，通过短请求查询进度。</small></label>
             <label className="dsi-check"><input data-setting="modelToolsEnabled" type="checkbox" checked={draft.modelToolsEnabled}
               onChange={event => setDraft({...draft, modelToolsEnabled: event.target.checked})}/>允许模型调用 Instabox 工具</label>
+            <label className="dsi-field"><span>对话中的桌面位置</span>
+              <select data-setting="desktopPlacement" value={draft.desktopPlacement} onChange={event=>setDraft({...draft,desktopPlacement:event.target.value as ConfigData['desktopPlacement']})}>
+                <option value="inline">最新消息下方</option><option value="sidebar">右侧栏预览</option>
+              </select><small>云电脑被使用时自动显示画面，完成后收成可展开的按钮。两种位置都可放大、观看和接管。</small>
+            </label>
             <p className="dsi-muted">接管时，该机器的模型变更操作会暂停；交还后恢复。云机运行、磁盘和流量受 Instabox 套餐及用量限制。</p>
             <div className="dsi-actions"><button type="submit" data-action="save-settings" className="dsi-primary" disabled={busy}>{busy ? '保存中…' : '保存设置'}</button>
               <button type="button" disabled={busy} onClick={() => setReload(value => value + 1)}>重新读取</button>

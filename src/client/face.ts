@@ -1,10 +1,13 @@
-import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView } from '../shared.js'
+import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView, ActivityView } from '../shared.js'
 
 export interface InstaboxFace {
   read(signal?: AbortSignal): Promise<SettingsView>
   save(request: SaveSettingsRequest, signal?: AbortSignal): Promise<SettingsView>
   execute(request: ActionRequest, signal?: AbortSignal): Promise<JobView>
   getJob(request: {jobId: string}, signal?: AbortSignal): Promise<JobView>
+}
+export interface InstaboxPreviewFace extends InstaboxFace {
+  getActivity(request: {sessionId: string}, signal?: AbortSignal): Promise<ActivityView>
 }
 export const settled = (job: JobView) => !['queued', 'running'].includes(job.status)
 

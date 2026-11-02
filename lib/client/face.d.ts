@@ -1,4 +1,4 @@
-import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView } from '../shared.js';
+import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView, ActivityView } from '../shared.js';
 export interface InstaboxFace {
     read(signal?: AbortSignal): Promise<SettingsView>;
     save(request: SaveSettingsRequest, signal?: AbortSignal): Promise<SettingsView>;
@@ -6,6 +6,11 @@ export interface InstaboxFace {
     getJob(request: {
         jobId: string;
     }, signal?: AbortSignal): Promise<JobView>;
+}
+export interface InstaboxPreviewFace extends InstaboxFace {
+    getActivity(request: {
+        sessionId: string;
+    }, signal?: AbortSignal): Promise<ActivityView>;
 }
 export declare const settled: (job: JobView) => boolean;
 /** Each HTTP request is short; waiting for a cloud operation never occupies a

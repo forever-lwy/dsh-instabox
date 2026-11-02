@@ -26,6 +26,7 @@ export const configSchema = z.object({
   defaultTemplate: z.string().trim().min(1).max(160).default('agent-browser'),
   requestTimeoutMs: z.number().int().min(5000).max(120000).default(45000),
   modelToolsEnabled: z.boolean().default(true),
+  desktopPlacement: z.enum(['inline', 'sidebar']).default('inline'),
 }).strict()
 export type ConfigData = z.infer<typeof configSchema>
 export const defaultConfig = (): ConfigData => configSchema.parse({})
@@ -50,5 +51,15 @@ export const controlViewSchema = z.object({
   machineId: z.string(), mode: z.enum(['agent', 'human']), ownerId: z.string().optional(), since: z.number().optional(), expiresAt: z.number().optional(), url: z.string().optional(), pendingCleanup: z.boolean().optional(),
 })
 export type ControlView = z.infer<typeof controlViewSchema>
+export const activityRequestSchema = z.object({sessionId: z.string().min(1).max(256)}).strict()
+export const activityMachineSchema = z.object({
+  machineId: z.string().regex(/^m_[A-Za-z0-9_-]+$/).max(160), name: z.string().optional(),
+  phase: z.enum(['busy', 'idle', 'inactive']), lastAction: z.enum(ACTIONS),
+  updatedAt: z.number(), pendingJobs: z.number().int().nonnegative(),
+  backgroundRunning: z.boolean(), machineState: z.string().optional(),
+})
+export type ActivityMachine = z.infer<typeof activityMachineSchema>
+export const activityViewSchema = z.object({sessionId: z.string(), revision: z.number().int().nonnegative(), machines: z.array(activityMachineSchema)})
+export type ActivityView = z.infer<typeof activityViewSchema>
 export interface ScreenshotResult {mimeType: 'image/png'; base64: string; width?: number; height?: number}
 export interface FileReadResult {path: string; format: 'text' | 'base64'; content: string}

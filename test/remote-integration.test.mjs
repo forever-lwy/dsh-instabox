@@ -16,7 +16,7 @@ import * as ReactDOM from 'react-dom'
 import { z } from 'zod'
 import { ConfigStore } from '../lib/store.js'
 import { InstaboxService } from '../lib/service.js'
-import { remoteInfo, getSettings, saveSettings, execute, getJob } from '../lib/remote.js'
+import { remoteInfo, getSettings, saveSettings, execute, getJob, getActivity } from '../lib/remote.js'
 
 test('real rc.5 HTTP gateway carries settings and asynchronous jobs without returning credentials', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'instabox-remote-'))
@@ -37,7 +37,7 @@ test('real rc.5 HTTP gateway carries settings and asynchronous jobs without retu
   const calls = []
   const store = new ConfigStore(join(directory, 'settings.json'))
   await store.load()
-  new InstaboxService(host, store, {apiFactory: async () => ({
+  const service = new InstaboxService(host, store, {apiFactory: async () => ({
     async execute(request) { calls.push(request); return {machines: [{id: 'm_test', name: 'test', state: 'running'}]} },
   })})
   host.typert.remotes.register(remoteInfo)
@@ -84,7 +84,7 @@ test('real rc.5 HTTP gateway carries settings and asynchronous jobs without retu
   runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), {
     window: {__ModuleLoader__: {load: definition => definitions.push(definition)}},
     document: {createElement: () => ({dataset: {}, remove() {}}), head: {appendChild: node => styleNodes.push(node)}},
-    URL, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
+    URL, AbortController, AbortSignal, structuredClone, setTimeout, clearTimeout, setInterval, clearInterval,
   })
   assert.equal(definitions.length, 1)
   const dependencies = {react: React, 'react/jsx-runtime': jsxRuntime, 'react-dom': ReactDOM, zod: {z}, '@deepseek-ai/cordis': {Context}}
@@ -116,4 +116,18 @@ test('real rc.5 HTTP gateway carries settings and asynchronous jobs without retu
   assert.equal(browserJob.status, 'succeeded', browserJob.error)
   assert.equal(browserJob.result.machines[0].id, 'm_test')
   assert.equal(calls.length, 2)
+  await service.executeAgent({action:'commands.run',machineId:'m_test',input:{cmd:'must-not-enter-preview-metadata'}},new AbortController().signal,'session-a',true)
+  const activity=await getActivity(client.remote,{sessionId:'session-a'})
+  assert.equal(activity.sessionId,'session-a')
+  assert.equal(activity.machines[0].machineId,'m_test')
+  assert.equal(activity.machines[0].phase,'busy')
+  assert.equal(JSON.stringify(activity).includes('must-not-enter-preview-metadata'),false)
+  assert.equal(JSON.stringify(activity).includes(secret),false)
+  assert.deepEqual((await browserFace.getActivity({sessionId:'session-b'})).machines,[])
+  host.emit('agent/status',{agent:{session:{id:'session-a'}},status:'idle'})
+  assert.equal((await browserFace.getActivity({sessionId:'session-a'})).machines[0].phase,'idle')
+  const placement=await browserFace.save({config:{...browserSettings.config,desktopPlacement:'sidebar'},expectedRevision:browserSettings.revision})
+  assert.equal(placement.config.desktopPlacement,'sidebar')
+  assert.equal((await browserFace.read()).config.desktopPlacement,'sidebar')
+  assert.ok(routes.includes('/api/instabox/getActivity'))
 })

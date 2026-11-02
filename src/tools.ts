@@ -89,7 +89,7 @@ export function registerTools(ctx: Context, service: InstaboxService): void {
     async execute(args, exec) {
       try {
         const request = args as ActionRequest
-        const job = await service.executeAgent(request, exec.signal)
+        const job = await service.executeAgent(request, exec.signal, exec.agent?.session.id, exec.agent?.status === 'running')
         return await prepare(job, exec.signal)
       } catch (error) { throw new RuntimeError(safeError(error)) }
     },
