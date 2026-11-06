@@ -31,7 +31,6 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --test-isolation=none test/*.test.mjs",
     "docs": "node scripts/generate-reference.mjs",
-    "prepare": "npm run build",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {
