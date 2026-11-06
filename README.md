@@ -1,13 +1,13 @@
 # DSH Instabox
 
-适用于 **DeepSeek Harness 0.2.1-rc.5** 的 Instabox 云电脑插件。独立的 Host 插件、浏览器面板及模型工具，使用官方 API 和固定版本 `@insforge/instabox-sdk@0.6.0`。
+适用于 **DeepSeek Harness**（当前在 `0.2.2-rc.1` 上构建测试，不按 dsh 版本拦截加载） 的 Instabox 云电脑插件。独立的 Host 插件、浏览器面板及模型工具，使用官方 API 和固定版本 `@insforge/instabox-sdk@0.6.0`。
 
 ## 安装
 
 开发源码和运行副本分离。本次修复版本包为：
 
 ```text
-/plugins/releases/dsh-instabox-0.1.2.tgz
+/plugins/releases/dsh-instabox-0.1.3.tgz
 ```
 
 在 DSH 的「插件 → 添加插件」输入上面的**容器路径**，由用户确认安装并启用。是否需要重启以安装界面提示为准。不要把源码目录用 `link:`、目录依赖或模块路径接入常用 profile。

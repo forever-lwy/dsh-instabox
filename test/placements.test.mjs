@@ -99,10 +99,15 @@ async function nativeModule(name,providers){
   let value
   const source=await readFile(new URL(import.meta.resolve(name+'/client')),'utf8')
   runInNewContext(source,{
-    window:{__ModuleLoader__:{load:({factory})=>{value=factory(id=>{
-      if(!(id in providers))throw Error('Unprovided native factory dependency: '+id)
-      return providers[id]
-    })}}},
+    window:{__ModuleLoader__:{load:({factory})=>{
+      const require=id=>{
+        if(!(id in providers))throw Error('Unprovided native factory dependency: '+id)
+        return providers[id]
+      }
+      // 0.2.2 bundles resolve static assets through require.asset(path).
+      require.asset=path=>'/'+path
+      value=factory(require)
+    }}},
     console,queueMicrotask,setTimeout,clearTimeout,structuredClone,AbortController,AbortSignal,URL,crypto:globalThis.crypto,
   },{filename:name+'/lib/client.js'})
   return value
