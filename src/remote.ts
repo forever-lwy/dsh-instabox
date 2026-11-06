@@ -8,7 +8,7 @@ const method = (input: z.ZodType, output: z.ZodType) => ({
   parameters: [{name: 'request', source: 'json' as const, codec: codec(input, 'InstaboxRequest'), strictCodec: codec(input, 'InstaboxRequest')}],
   result: codec(output, 'InstaboxResult'), cancellation: {parameter: 'signal' as const},
 })
-export const remoteInfo = createTypertRemoteInfo({package: 'dsh-instabox', methods: {
+export const remoteInfo = createTypertRemoteInfo({package: '@forever-lwy/dsh-instabox', methods: {
   'instabox/getSettings': method(z.object({}).strict(), settingsViewSchema),
   'instabox/saveSettings': method(saveSettingsSchema, settingsViewSchema),
   'instabox/execute': method(actionSchema, jobViewSchema),

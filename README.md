@@ -4,19 +4,23 @@
 
 ## 安装
 
-开发源码和运行副本分离。本次修复版本包为：
+在 DSH「插件 → 添加插件」输入下面的来源，确认安装并启用：
 
 ```text
-/plugins/releases/dsh-instabox-0.1.3.tgz
+github:forever-lwy/dsh-instabox
 ```
 
-在 DSH 的「插件 → 添加插件」输入上面的**容器路径**，由用户确认安装并启用。是否需要重启以安装界面提示为准。不要把源码目录用 `link:`、目录依赖或模块路径接入常用 profile。
+仓库默认分支是 `release`，其中每个提交都是某次发版的源码加上构建好的 `lib/`，并去掉了 `prepare`，所以安装时不装 devDependencies、不构建。dshmarket 按默认分支上 `package.json` 的版本号判断是否有更新，点击更新时安装 `release` 的最新提交。不要安装 `master`：它只有源码，安装时会靠 `prepare` 拉全部 devDependencies 现场构建。
+
+包名自 0.1.4 起为 `@forever-lwy/dsh-instabox`，以免与 npm 和插件市场目录里的同名插件混淆。从旧的 `dsh-instabox` 版本包迁移时，先卸载旧的 `dsh-instabox`，再安装上面的来源；两者注册同一宿主行，不能同时安装。宿主行 id 和设置命名空间不变。
 
 插件提供「Instabox」主导航入口和设置页面。首次打开设置，填入 Instabox API Key 并保存；界面仅显示是否配置，不会读回密钥。普通设置存入 DSH_HOME 下的插件独立文件，密钥交给 DSH credentials 服务保存。
 
 推荐使用**创建机器的本人账号的个人 API Key**：机器执行需要 `machines:read` 和 `machines:write`，删除机器需要 `machines:delete`，快照管理需要对应的 `images:*` 权限。只读 Key 无法启动桌面。
 
 官方桌面分享接口不接受 workspace API Key；该 Key 可执行其他有权限的操作，但生成桌面 viewer 会得到 403。当前版本以个人 Key 的官方 viewer 为桌面接入方式，不提供 workspace Key 的自建 VNC WebSocket 中继。
+
+是否需要重启以安装界面提示为准。不要用 `link:`、目录依赖或模块路径把源码目录接入常用 profile。
 
 ## 桌面与人工接管
 
@@ -78,12 +82,13 @@ npm ci --ignore-scripts
 npm run check
 npm run build
 npm test
-npm pack --pack-destination ../releases
 ```
 
-Git 来源安装可通过 `prepare` 构建；如果 pnpm 提示构建许可，由用户按具体包确认。发布下一版时递增版本号并使用新的 `.tgz` 文件名。此项目不自动向 GitHub 推送、不发布市场索引、不安装到日常 profile。
+需要离线备用的本地版本包时，再运行 `npm pack --pack-destination ../releases`，每版使用新的版本号和文件名。开发过程不安装到日常 profile。
 
 离线测试覆盖协议、输入校验、凭据边界、接管互斥及浏览器行为。没有真实账号时不能声称完成了官方云端端到端测试。账号安装后的验证步骤见 [实机验证](docs/verification.md)。
+
+发版：在 `master` 上开发和推送不会触发任何构建。改完后递增 `package.json` 版本并提交，打同名标签并推送，例如 `git tag v0.1.4 && git push origin master v0.1.4`。GitHub Actions（`.github/workflows/release.yml`）只在 `v*` 标签推送时运行：检查标签与版本一致，按 lockfile `npm ci`，由 `scripts/release.mjs` 构建、测试，在 `release` 分支上追加一个发布提交（源码加 `lib/`，去掉 `prepare`；父提交是上一个发布提交和该标签的源码提交）并推送。`release` 已有同一或更高版本时会拒绝发版。`npm run release` 可在本地对已打标签的提交生成同样的发布提交（不推送）。
 
 ## 官方接口
 
