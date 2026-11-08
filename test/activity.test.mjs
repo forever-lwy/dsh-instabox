@@ -180,7 +180,7 @@ test('model tools derive session identity from exec.agent, not arguments or a gl
   ctx.provide('tools',{register:definition=>definitions.set(definition.name,definition)})
   registerTools(ctx,{current:()=>defaultConfig(),executeAgent:async(...args)=>{calls.push(args);return job('desktop.click',{ok:true})}})
   t.after(()=>ctx.fiber.dispose())
-  const tool=definitions.get('instabox_desktop')
+  const tool=definitions.get('instabox')
   await tool.execute(request('desktop.click',id,{x:1,y:2}),{signal:signal(),agent:{session:{id:'session-a'},status:'running'}})
   await tool.execute(request('desktop.click',id,{x:1,y:2}),{signal:signal(),agent:{session:{id:'session-b'},status:'idle'}})
   assert.equal(calls[0][2],'session-a');assert.equal(calls[0][3],true)

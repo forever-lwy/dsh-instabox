@@ -27,7 +27,7 @@ test('actual plugin activates and removes its tools and RPC service under the sh
   await ctx.plugin(NativeToolExecutor)
   ctx.provide('credentials', {describe: async () => ({configured: false, writable: true}), resolve: async () => undefined})
   ctx.provide('attachments', {saveImage: async () => {throw new Error('activation must not generate screenshots')}})
-  const toolNames = ['instabox_machine', 'instabox_command', 'instabox_file', 'instabox_desktop', 'instabox_snapshot', 'instabox_network', 'instabox_task', 'instabox_help']
+  const toolNames = ['instabox']
   for (let cycle = 0; cycle < 2; cycle++) {
     const fiber = await ctx.plugin(Plugin)
     await fiber.await()
@@ -35,7 +35,7 @@ test('actual plugin activates and removes its tools and RPC service under the sh
     assert.ok(ctx.get('instabox'))
     for (const name of toolNames) assert.ok(ctx.tools.get(name), name)
     // 0.2.2 runs call batches through the selected executor.
-    const batch = await ctx.tools.execute({calls: [{type: 'tool-call', id: 'activation-help', name: 'instabox_help', arguments: JSON.stringify({action: 'desktop.drag'})}], signal: new AbortController().signal})
+    const batch = await ctx.tools.execute({calls: [{type: 'tool-call', id: 'activation-help', name: 'instabox', arguments: JSON.stringify({action: 'help', input: {action: 'desktop.drag'}})}], signal: new AbortController().signal})
     const help = batch.results[0].result
     assert.equal(help.isError, false, JSON.stringify(help))
     assert.ok(help.content.some(block => block.type === 'text' && block.text.includes('from')))
