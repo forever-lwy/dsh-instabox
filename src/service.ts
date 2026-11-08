@@ -22,9 +22,8 @@ export class InstaboxService extends TypertRemoteService {
     super(ctx, 'instabox')
     this.runtime = new InstaboxRuntime(options.apiFactory ?? (() => this.createApi()), Date.now, {journal: new ControlLeaseStore(join(dirname(store.path), 'control-leases.json'))})
     ctx.effect(() => () => this.runtime.dispose(), 'instabox: jobs and desktop leases')
-    const timer = setInterval(() => this.sweepActivityJobs(), 250)
-    timer.unref?.()
-    ctx.effect(() => () => {this.activityDisposed=true;clearInterval(timer);this.activityJobs.clear();this.activity.dispose()}, 'instabox: session activity')
+    // The activity sweep runs only while activity jobs are in flight.
+    ctx.effect(() => () => {this.activityDisposed=true;this.stopSweep();this.activityJobs.clear();this.activity.dispose()}, 'instabox: session activity')
     ctx.on('agent/status', ({agent,status}) => this.activity.setRunning(String(agent.session.id), status === 'running'))
     ctx.on('agent/disposed', ({agent}) => this.activity.setRunning(String(agent.session.id), false))
     ctx.on('session/event', (session,event) => {
@@ -33,6 +32,22 @@ export class InstaboxService extends TypertRemoteService {
     })
   }
   current(): ConfigData { return this.store.current() }
+  private readonly savedListeners = new Set<() => void>()
+  private sweepTimer: ReturnType<typeof setInterval> | null = null
+  /** Observe successful settings saves; returns the disposer. */
+  onSaved(listener: () => void): () => void {
+    this.savedListeners.add(listener)
+    return () => { this.savedListeners.delete(listener) }
+  }
+  private ensureSweep(): void {
+    if (this.sweepTimer !== null || this.activityDisposed || this.activityJobs.size === 0) return
+    this.sweepTimer = setInterval(() => this.sweepActivityJobs(), 250)
+    this.sweepTimer.unref?.()
+  }
+  private stopSweep(): void {
+    if (this.sweepTimer !== null) clearInterval(this.sweepTimer)
+    this.sweepTimer = null
+  }
   private async createApi(): Promise<ApiPort> {
     const config = this.current()
     const key = await this.ctx.credentials.resolve(credentialRef(config.apiKeyRef))
@@ -82,6 +97,7 @@ export class InstaboxService extends TypertRemoteService {
       await this.store.save(request.config, request.expectedRevision)
       if (!request.config.modelToolsEnabled) this.runtime.cancelAgentJobs()
       if (changesKey) await this.runtime.retryCleanup()
+      for (const listener of this.savedListeners) { try { listener() } catch { /* listeners never fail a save */ } }
     } catch (error) {
       if (error instanceof ConfigConflict) throw new RemoteError('gateway/bad-request', error.message, {})
       throw new RemoteError('gateway/internal', '保存未完成，请重新加载核对设置及凭据后重试。', {})
@@ -135,7 +151,7 @@ export class InstaboxService extends TypertRemoteService {
     // transfer must not make this observer keep a second copy of file bytes,
     // shell commands, URLs or credentials from request.input.
     const metadata:ActionRequest={action:request.action,...(request.machineId?{machineId:request.machineId}:{})}
-    if(['queued','running'].includes(job.status))this.activityJobs.set(job.jobId,{request:metadata,...(token?{token}:{})})
+    if(['queued','running'].includes(job.status)){this.activityJobs.set(job.jobId,{request:metadata,...(token?{token}:{})});this.ensureSweep()}
     else {this.activity.finish(token,job);this.activity.observe(metadata,job)}
   }
   private sweepActivityJobs(): void {
@@ -148,5 +164,6 @@ export class InstaboxService extends TypertRemoteService {
         this.activity.finish(entry.token,job);this.activity.observe(entry.request,job)
       }catch{this.activityJobs.delete(jobId);this.activity.finish(entry.token)}
     }
+    if(this.activityJobs.size===0)this.stopSweep()
   }
 }

@@ -353,7 +353,7 @@ test('model screenshot produces durable image with original screen coordinates; 
   const service={current:()=>defaultConfig(),executeAgent:async()=>({jobId:'test-job',action:'desktop.screenshot',machineId:id,status:'succeeded',createdAt:0,updatedAt:0,result:{mimeType:'image/png',base64:'AA==',width:2560,height:1600}})}
   registerTools(ctx,service)
   t.after(()=>ctx.fiber.dispose())
-  const definition=tools.get('instabox_desktop')
+  const definition=tools.get('instabox')
   const value=await definition.execute({action:'desktop.screenshot',machineId:id},{signal:signal()})
   const content=definition.output.render({},value)
   assert.equal(content[1].type,'image')
@@ -362,11 +362,11 @@ test('model screenshot produces durable image with original screen coordinates; 
   assert.equal(value.result.screenHeight,1600)
   assert.equal(JSON.stringify(value).includes('base64'),false)
   assert.equal(images.length,1)
-  const help=await tools.get('instabox_help').execute({action:'machines.create'},{signal:signal()})
+  const help=await tools.get('instabox').execute({action:'help',input:{action:'machines.create'}},{signal:signal()})
   assert.ok(help.inputSchema.properties.templateId)
   assert.ok(help.inputSchema.properties.snapshotId)
   assert.equal(help.inputSchema.properties.template,undefined)
-  const portHelp=await tools.get('instabox_help').execute({action:'ports.publish'},{signal:signal()})
+  const portHelp=await tools.get('instabox').execute({action:'help',input:{action:'ports.publish'}},{signal:signal()})
   assert.deepEqual(portHelp.inputSchema.properties.access.enum,['private','public'])
 })
 
@@ -382,13 +382,13 @@ test('nested screenshot is injected into its agent only after the enclosing tool
   const rootToken=Symbol('root')
   const job={jobId:'image-job',result:{image}}
   const successful={isError:false,content:[{type:'image',attachment:image}],meta:{instabox:job}}
-  ctx.emit('tools/result',{name:'instabox_desktop',token:Symbol('child'),parent:rootToken,agent,signal:signal()},successful)
+  ctx.emit('tools/result',{name:'instabox',token:Symbol('child'),parent:rootToken,agent,signal:signal()},successful)
   assert.equal(injected.length,0)
   ctx.emit('tools/result',{name:'run_code',token:rootToken,agent,signal:signal()},{isError:false,content:[]})
   assert.equal(injected.length,1)
   assert.equal(injected[0].content[0].attachment.attachmentId,'nested-image')
   const failedRoot=Symbol('failed-root')
-  ctx.emit('tools/result',{name:'instabox_desktop',token:Symbol('child2'),parent:failedRoot,agent,signal:signal()},successful)
+  ctx.emit('tools/result',{name:'instabox',token:Symbol('child2'),parent:failedRoot,agent,signal:signal()},successful)
   ctx.emit('tools/result',{name:'run_code',token:failedRoot,agent,signal:signal()},{isError:true,content:[]})
   assert.equal(injected.length,1)
 })

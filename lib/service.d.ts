@@ -21,6 +21,12 @@ export declare class InstaboxService extends TypertRemoteService {
     private saves;
     constructor(ctx: Context, store: ConfigStore, options?: ServiceOptions);
     current(): ConfigData;
+    private readonly savedListeners;
+    private sweepTimer;
+    /** Observe successful settings saves; returns the disposer. */
+    onSaved(listener: () => void): () => void;
+    private ensureSweep;
+    private stopSweep;
     private createApi;
     getSettings(request: Record<string, never>, signal: AbortSignal): Promise<SettingsView>;
     saveSettings(request: SaveSettingsRequest, signal: AbortSignal): Promise<SettingsView>;
