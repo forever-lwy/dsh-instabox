@@ -1,6 +1,6 @@
 # DSH Instabox
 
-适用于 **DeepSeek Harness**（当前在 `0.2.2-rc.1` 上构建测试，不按 dsh 版本拦截加载） 的 Instabox 云电脑插件。独立的 Host 插件、浏览器面板及模型工具，使用官方 API 和固定版本 `@insforge/instabox-sdk@0.6.0`。
+适用于 **DeepSeek Harness**（当前在 `0.2.2-rc.3` 上构建测试，不按 dsh 版本拦截加载） 的 Instabox 云电脑插件。独立的 Host 插件、浏览器面板及模型工具，使用官方 API 和固定版本 `@insforge/instabox-sdk@0.6.0`。
 
 ## 安装
 
