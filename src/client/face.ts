@@ -1,10 +1,13 @@
-import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView, ActivityView } from '../shared.js'
+import type { ActionRequest, JobView, SaveSettingsRequest, SettingsView, ActivityView, WorkspaceBindRequest, WorkspaceView } from '../shared.js'
 
 export interface InstaboxFace {
   read(signal?: AbortSignal): Promise<SettingsView>
   save(request: SaveSettingsRequest, signal?: AbortSignal): Promise<SettingsView>
   execute(request: ActionRequest, signal?: AbortSignal): Promise<JobView>
   getJob(request: {jobId: string}, signal?: AbortSignal): Promise<JobView>
+  /** Present on the panel face only: the Settings section and the preview
+   * controller never adopt a Workspace. */
+  bindWorkspace?(request: WorkspaceBindRequest, signal?: AbortSignal): Promise<WorkspaceView>
 }
 export interface InstaboxPreviewFace extends InstaboxFace {
   getActivity(request: {sessionId: string}, signal?: AbortSignal): Promise<ActivityView>

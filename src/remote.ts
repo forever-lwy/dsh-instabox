@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createTypertRemoteInfo } from '@deepseek-ai/dsh-typert-protocol/remote-info'
-import { actionSchema, settingsViewSchema, saveSettingsSchema, jobViewSchema, getJobSchema, activityRequestSchema, activityViewSchema } from './shared.js'
-import type { ActionRequest, SettingsView, SaveSettingsRequest, JobView, ActivityView } from './shared.js'
+import { actionSchema, settingsViewSchema, saveSettingsSchema, jobViewSchema, getJobSchema, activityRequestSchema, activityViewSchema, workspaceBindSchema, workspaceViewSchema } from './shared.js'
+import type { ActionRequest, SettingsView, SaveSettingsRequest, JobView, ActivityView, WorkspaceBindRequest, WorkspaceView } from './shared.js'
 const codec = (schema: z.ZodType, typeSymbol: string) => ({mode: 'strict' as const, typeSymbol, create: () => schema})
 const method = (input: z.ZodType, output: z.ZodType) => ({
   service: 'instabox', invocation: {kind: 'direct' as const},
@@ -14,6 +14,7 @@ export const remoteInfo = createTypertRemoteInfo({package: '@forever-lwy/dsh-ins
   'instabox/execute': method(actionSchema, jobViewSchema),
   'instabox/getJob': method(getJobSchema, jobViewSchema),
   'instabox/getActivity': method(activityRequestSchema, activityViewSchema),
+  'instabox/bindWorkspace': method(workspaceBindSchema, workspaceViewSchema),
 }}, z)
 async function invoke<T>(remote: any, key: string, request: unknown, signal?: AbortSignal): Promise<T> {
   const result = await (remoteInfo.methods as any)[key].invoke(remote, {request}, signal)
@@ -25,3 +26,4 @@ export const saveSettings = (remote: any, request: SaveSettingsRequest, signal?:
 export const execute = (remote: any, request: ActionRequest, signal?: AbortSignal) => invoke<JobView>(remote, 'instabox/execute', request, signal)
 export const getJob = (remote: any, request: {jobId: string}, signal?: AbortSignal) => invoke<JobView>(remote, 'instabox/getJob', request, signal)
 export const getActivity = (remote: any, request: {sessionId: string}, signal?: AbortSignal) => invoke<ActivityView>(remote, 'instabox/getActivity', request, signal)
+export const bindWorkspace = (remote: any, request: WorkspaceBindRequest, signal?: AbortSignal) => invoke<WorkspaceView>(remote, 'instabox/bindWorkspace', request, signal)
