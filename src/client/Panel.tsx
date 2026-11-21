@@ -3,6 +3,7 @@ import { ACTIONS, defaultConfig, type Action, type ActionRequest, type ControlVi
 import { base64ToBytes, bytesToBase64, listOf, machineIdOf, pretty, viewerUrl, waitForJob, type InstaboxFace } from './face.js'
 import { InstaboxSettings } from './Settings.js'
 import { Resources } from './Resources.js'
+import { WorkspacePicker } from './WorkspacePicker.js'
 
 type Run = (action: Action, input?: Record<string, unknown>, machineId?: string, quiet?: boolean) => Promise<any>
 type Field = {key: string; label: string; type?: 'text'|'number'|'textarea'|'checkbox'|'json'; value?: string|number|boolean; required?: boolean; options?: string[]; min?: number; max?: number; hint?: string}
@@ -211,7 +212,7 @@ function Advanced({run,machineId}: {run:Run;machineId:string}) {
     </form>{error&&<p role="alert" className="dsi-error">{error}</p>}{result!==undefined&&<pre>{pretty(result)}</pre>}</div>
 }
 
-export function InstaboxPanel({face,closePanel}: {face:InstaboxFace;closePanel?:()=>void}) {
+export function InstaboxPanel({face,closePanel,openCloudWorkspace}: {face:InstaboxFace;closePanel?:()=>void;openCloudWorkspace?:(localPath:string, signal?:AbortSignal)=>Promise<void>}) {
   const [settings,setSettings]=useState<SettingsView|null>(null),[machines,setMachines]=useState<any[]>([]),[machineId,setMachineId]=useState('')
   const [tab,setTab]=useState('desktop'),[create,setCreate]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true)
   const [control,setControl]=useState<ControlView|null>(null),[history,setHistory]=useState<JobView[]>([])
@@ -266,7 +267,7 @@ export function InstaboxPanel({face,closePanel}: {face:InstaboxFace;closePanel?:
   },[machineId,ownerId,run])
   const selected=machines.find(item=>machineIdOf(item)===machineId)
   const mutate=async(action:Action,input:Record<string,unknown>={})=>{try{await run(action,input);await refresh()}catch(reason){setError(reason instanceof Error?reason.message:String(reason))}}
-  const requireMachine=!machineId && !['settings','resources','snapshots','advanced'].includes(tab)
+  const requireMachine=!machineId && !['settings','resources','snapshots','advanced','workspace'].includes(tab)
   return <main className="dsi" aria-label="Instabox 云电脑">
     <header className="dsi-head"><div><div className="dsi-brand"><InstaboxIcon/><h1>Instabox 云电脑</h1></div><p>独立 Linux 云机 · 桌面 · 人工接管</p></div><div className="dsi-actions"><button type="button" disabled={loading||!settings?.credential.configured} onClick={()=>void refresh().catch(reason=>setError(String(reason)))}>刷新机器</button><button type="button" data-action="new-machine" disabled={!settings?.credential.configured} className="dsi-primary" onClick={()=>setCreate(value=>!value)}>新建机器</button>{closePanel&&<button type="button" onClick={closePanel}>返回会话</button>}</div></header>
     {error&&<p role="alert" className="dsi-error">{error}</p>}
@@ -277,8 +278,9 @@ export function InstaboxPanel({face,closePanel}: {face:InstaboxFace;closePanel?:
     <div className="dsi-machinebar"><span>当前机器</span><select aria-label="当前机器" value={machineId} onChange={event=>setMachineId(event.target.value)}><option value="">{machines.length?'请选择机器':'暂无机器'}</option>{machines.map(machine=><option key={machineIdOf(machine)} value={machineIdOf(machine)}>{machineName(machine)} · {stateName(machine.state??machine.machine?.state)}</option>)}</select>
       {selected&&<><span className="dsi-pill">{stateName(selected.state??selected.machine?.state)}</span><div className="dsi-actions"><button type="button" onClick={()=>void mutate('machines.start')}>启动</button><button type="button" onClick={()=>void mutate('machines.resume')}>恢复</button><button type="button" onClick={()=>{if(window.confirm('暂停机器并保留内存状态？'))void mutate('machines.suspend')}}>暂停</button><button type="button" onClick={()=>{if(window.confirm('关闭机器？正在运行的进程会结束。'))void mutate('machines.stop')}}>关机</button><button type="button" className="dsi-danger" onClick={()=>{if(window.confirm(`永久删除 ${machineName(selected)} 及其全部磁盘数据？`))void mutate('machines.delete',{confirm:machineId})}}>删除</button></div></>}
     </div>
-    <nav className="dsi-tabs" aria-label="云机功能" role="tablist">{[['desktop','桌面'],['terminal','终端与任务'],['files','文件'],['snapshots','快照'],['network','端口与 SSH'],['resources','资源与用量'],['advanced','高级操作'],['settings','设置']].map(([key,label])=><button type="button" key={key} role="tab" aria-selected={tab===key} data-tab={key} onClick={()=>setTab(key)}>{label}</button>)}</nav>
+    <nav className="dsi-tabs" aria-label="云机功能" role="tablist">{[['desktop','桌面'],['terminal','终端与任务'],['files','文件'],['workspace','工作区'],['snapshots','快照'],['network','端口与 SSH'],['resources','资源与用量'],['advanced','高级操作'],['settings','设置']].map(([key,label])=><button type="button" key={key} role="tab" aria-selected={tab===key} data-tab={key} onClick={()=>setTab(key)}>{label}</button>)}</nav>
     {tab==='settings'?<InstaboxSettings face={face} onSaved={value=>{setSettings(value);if(value.credential.configured)void refresh().catch(reason=>setError(String(reason)))}}/>:
+      tab==='workspace'?<WorkspacePicker face={face} openCloudWorkspace={openCloudWorkspace}/>:
       requireMachine?<div className="dsi-empty"><InstaboxIcon/><p>{settings?.credential.configured?'创建或选择一台云机后开始操作。':'先在设置中保存 Instabox API Key。'}</p><button type="button" onClick={()=>setTab('settings')}>打开设置</button></div>:
       <div key={`${machineId}:${tab}`} role="tabpanel" aria-label={tab}>
         {tab==='desktop'&&<Desktop run={run} machineId={machineId} ownerId={ownerId} control={control} setControl={setControl}/>}

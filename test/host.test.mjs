@@ -206,7 +206,9 @@ test('failed viewer revocation survives a runtime reload as durable human contro
   assert.equal(durable.leases[0].ownerId,ownerId)
   assert.equal(JSON.stringify(durable).includes('https:'),false)
   assert.equal(JSON.stringify(durable).includes('ibk_'),false)
-  assert.equal((await stat(path)).mode&0o777,0o600)
+  // Windows ignores POSIX mode bits; the owner-only guarantee there is inherited
+  // from the profile directory's ACL, so only POSIX platforms can assert 0o600.
+  if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o600)
   fixture.failRevocation(true)
   await first.dispose()
   assert.equal(JSON.parse(await readFile(path,'utf8')).leases.length,1)
@@ -324,7 +326,7 @@ test('real Cordis service keeps credential values out of settings/disk, enforces
   const service=new InstaboxService(ctx,store,{apiFactory:async()=>({execute:async request=>{calls.push(request);return {ok:true}}})})
   t.after(async()=>{await ctx.fiber.dispose();await rm(dir,{recursive:true,force:true})})
   assert.equal(ctx.instabox.current().defaultTemplate,'agent-browser')
-  assert.deepEqual(remoteMethods(service).map(row=>row.method).sort(),['execute','getActivity','getJob','getSettings','saveSettings'])
+  assert.deepEqual(remoteMethods(service).map(row=>row.method).sort(),['bindWorkspace','execute','getActivity','getJob','getSettings','saveSettings'])
   const initial=await service.getSettings({},signal())
   const secret='ibk_synthetic_test_123456'
   const saved=await service.saveSettings({config:initial.config,expectedRevision:0,apiKey:secret},signal())
@@ -332,7 +334,8 @@ test('real Cordis service keeps credential values out of settings/disk, enforces
   assert.equal(saved.credential.configured,true)
   assert.equal(JSON.stringify(saved).includes(secret),false)
   assert.equal((await readFile(store.path,'utf8')).includes(secret),false)
-  assert.equal((await stat(store.path)).mode&0o777,0o600)
+  // Same platform rule as the control journal above.
+  if(process.platform!=='win32')assert.equal((await stat(store.path)).mode&0o777,0o600)
   await assert.rejects(service.saveSettings({config:initial.config,expectedRevision:0,apiKey:'ibk_replacement_test123'},signal()), /其他窗口修改/)
   assert.equal(credentials.get('INSTABOX_API_KEY'),secret)
   await service.executeAgent({action:'machines.create'},signal())

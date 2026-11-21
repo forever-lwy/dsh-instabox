@@ -3,12 +3,13 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { InstaboxApi } from './api.js'
-import { actionSchema, activityRequestSchema, getJobSchema, saveSettingsSchema, type ActionRequest, type ActivityView, type ConfigData, type JobView, type SaveSettingsRequest, type SettingsView } from './shared.js'
-import { ConfigConflict, ConfigStore } from './store.js'
+import { actionSchema, activityRequestSchema, getJobSchema, saveSettingsSchema, type ActionRequest, type ActivityView, type ConfigData, type JobView, type SaveSettingsRequest, type SettingsView, type WorkspaceBindRequest, type WorkspaceView } from './shared.js'
 import { ControlLeaseStore } from './control-store.js'
+import { ConfigConflict, ConfigStore } from './store.js'
 import { dirname, join } from 'node:path'
 import { InstaboxRuntime, RuntimeError, safeError, type ApiPort } from './runtime.js'
 import { ActivityTracker } from './activity.js'
+import { bindMirror, WorkspaceError } from './workspace.js'
 
 declare module '@deepseek-ai/cordis' { interface Context { instabox: InstaboxService } }
 export interface ServiceOptions { apiFactory?: () => Promise<ApiPort> }
@@ -128,6 +129,19 @@ export class InstaboxService extends TypertRemoteService {
     if(!parsed.success)throw new RemoteError('gateway/bad-request','会话标识无效。',{})
     this.sweepActivityJobs()
     return this.activity.snapshot(parsed.data.sessionId)
+  }
+  /** Create or reuse the local mirror that stands for one cloud directory, so
+   * the picker can hand the core a real local path. No file is transferred:
+   * the mirror holds only its identifier, and every read and write for the
+   * Session keeps going through the API. */
+  @Remote
+  async bindWorkspace(request: WorkspaceBindRequest, signal: AbortSignal): Promise<WorkspaceView> {
+    signal.throwIfAborted()
+    try { return await bindMirror(join(dirname(this.store.path), 'workspaces'), request) }
+    catch (error:any) {
+      if (error instanceof WorkspaceError) throw new RemoteError('gateway/bad-request', error.message, {})
+      throw new RemoteError('gateway/bad-request', `无法建立云机工作目录：${error?.code === 'EACCES' ? '没有写入权限' : '请检查本机磁盘与路径' }。`, {})
+    }
   }
   async executeAgent(request: ActionRequest, signal: AbortSignal, sessionId?: string, running?: boolean): Promise<JobView> {
     signal.throwIfAborted()
