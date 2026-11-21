@@ -29,7 +29,7 @@ type Props = {
   /** Adopt the Host's local mirror as a Workspace and open a Session in it.
    * Owned by the panel's registration, so this component never reaches for
    * client services itself. */
-  openCloudWorkspace?: (localPath: string) => Promise<void>
+  openCloudWorkspace?: (localPath: string, signal?: AbortSignal) => Promise<void>
 }
 
 /** Pick a cloud directory and turn it into a local Workspace. The dialog only
@@ -39,6 +39,7 @@ export function WorkspacePicker({face, openCloudWorkspace}: Props) {
   const [machines, setMachines] = useState<any[]>([])
   const [machineId, setMachineId] = useState('')
   const [path, setPath] = useState('/data/home')
+  const [draft, setDraft] = useState('/data/home')
   const [entries, setEntries] = useState<{name: string; path: string}[]>([])
   const [listing, setListing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -89,9 +90,15 @@ export function WorkspacePicker({face, openCloudWorkspace}: Props) {
     } finally { if (current()) setListing(false) }
   }, [])
 
-  // Listing one level is a navigation step, so it runs when the machine or the
-  // entered path changes — never on the `load` identity, which would loop.
+  // Listing follows the committed path only. The text field is a draft, so
+  // keystrokes do not submit files.list; Enter, refresh and directory buttons
+  // commit it.
   useEffect(() => { if (machineId) void load(path, machineId) }, [machineId, path, load])
+  const commit = (next: string) => {
+    setDraft(next)
+    if (next === path) void load(next, machineId)
+    else setPath(next)
+  }
 
   // Leaving the panel cancels both in-flight operations; their results would
   // otherwise land in a component that no longer exists.
@@ -115,7 +122,7 @@ export function WorkspacePicker({face, openCloudWorkspace}: Props) {
       if (!current()) return
       // Handing the path to the host closes this panel, so the state below this
       // line belongs to no rendered component any more.
-      await openCloudWorkspace(view.localPath)
+      await openCloudWorkspace(view.localPath, controller.signal)
     } catch (reason) {
       if (!current()) return
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -133,21 +140,21 @@ export function WorkspacePicker({face, openCloudWorkspace}: Props) {
         </select>
       </label>
       <label className="dsi-field"><span>目录（绝对路径）</span>
-        <input type="text" value={path} spellCheck={false} disabled={busy}
-          onChange={event => setPath(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void load(path, machineId) } }}/>
+        <input type="text" value={draft} spellCheck={false} disabled={busy}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commit(draft) } }}/>
         <small>回车读取该目录</small>
       </label>
     </div>
     <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
-      <button type="button" onClick={() => setPath(parentOf(path))} disabled={busy || path === '/'}>上一级</button>
-      <button type="button" onClick={() => void load(path, machineId)} disabled={busy || listing || !machineId}>{listing ? '读取中…' : '刷新目录'}</button>
+      <button type="button" onClick={() => commit(parentOf(path))} disabled={busy || path === '/'}>上一级</button>
+      <button type="button" onClick={() => commit(draft)} disabled={busy || listing || !machineId}>{listing ? '读取中…' : '刷新目录'}</button>
       <button type="button" className="dsi-primary" onClick={() => void bind()} disabled={busy || !machineId}>用此目录新建会话</button>
     </div>
     {listing && <p role="status" className="dsi-loading">正在读取云机目录…</p>}
     {entries.length > 0 && <ul className="dsi-list" style={{marginTop:10, maxHeight:220, overflow:'auto'}}>
       {entries.map(entry => <li key={entry.path}>
-        <button type="button" onClick={() => setPath(entry.path)} disabled={busy}>{entry.name}/</button>
+        <button type="button" onClick={() => commit(entry.path)} disabled={busy}>{entry.name}/</button>
       </li>)}
     </ul>}
     {!listing && machineId && entries.length === 0 && !error && <p className="dsi-muted">该目录下没有子目录，可直接使用此目录。</p>}

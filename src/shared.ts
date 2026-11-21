@@ -56,7 +56,7 @@ export const activityRequestSchema = z.object({sessionId: z.string().min(1).max(
  * identifier file; every read and write for the Session goes through the API. */
 export const workspaceBindSchema = z.object({
   machineId: z.string().trim().regex(/^m_[A-Za-z0-9_-]+$/, '请填写列表中的机器 ID（m_…）').max(160),
-  remotePath: z.string().trim().min(1).max(4096).refine(value => value.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(value), '请选择云机上的绝对目录'),
+  remotePath: z.string().min(1).max(4096).refine(value => value.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(value), '请选择云机上的绝对目录'),
 }).strict()
 export type WorkspaceBindRequest = z.infer<typeof workspaceBindSchema>
 export const workspaceViewSchema = z.object({

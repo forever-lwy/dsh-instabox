@@ -212,7 +212,7 @@ function Advanced({run,machineId}: {run:Run;machineId:string}) {
     </form>{error&&<p role="alert" className="dsi-error">{error}</p>}{result!==undefined&&<pre>{pretty(result)}</pre>}</div>
 }
 
-export function InstaboxPanel({face,closePanel,openCloudWorkspace}: {face:InstaboxFace;closePanel?:()=>void;openCloudWorkspace?:(localPath:string)=>Promise<void>}) {
+export function InstaboxPanel({face,closePanel,openCloudWorkspace}: {face:InstaboxFace;closePanel?:()=>void;openCloudWorkspace?:(localPath:string, signal?:AbortSignal)=>Promise<void>}) {
   const [settings,setSettings]=useState<SettingsView|null>(null),[machines,setMachines]=useState<any[]>([]),[machineId,setMachineId]=useState('')
   const [tab,setTab]=useState('desktop'),[create,setCreate]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true)
   const [control,setControl]=useState<ControlView|null>(null),[history,setHistory]=useState<JobView[]>([])

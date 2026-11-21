@@ -47,14 +47,15 @@ export async function apply(ctx: Context): Promise<void> {
     // instead of reading `remoteCtx.workspaces` directly. The panel's own
     // registration stays untouched: a composition without these services simply
     // never offers the Session, and the rest of the panel keeps working.
-    let openCloudWorkspace: ((localPath: string) => Promise<void>) | undefined
+    let openCloudWorkspace: ((localPath: string, signal?: AbortSignal) => Promise<void>) | undefined
     remoteCtx.inject(['workspaces','uiWorkspace'], (workspaceCtx: any) => {
       const workspaces = workspaceCtx.workspaces
       const uiWorkspace = workspaceCtx.uiWorkspace
-      openCloudWorkspace = async (localPath: string): Promise<void> => {
+      openCloudWorkspace = async (localPath: string, signal?: AbortSignal): Promise<void> => {
         const workspace = await workspaces.create({path: localPath})
+        if (signal?.aborted) return
         closePanel()
-        if (uiWorkspace && typeof uiWorkspace.startSession === 'function') await uiWorkspace.startSession(workspace.workspaceId)
+        if (uiWorkspace && typeof uiWorkspace.startSession === 'function') uiWorkspace.startSession(workspace.workspaceId)
       }
     })
     // Register the keyed panel before its navigation row; rc.5 refuses to

@@ -1,10 +1,12 @@
-import { basename, dirname, sep } from 'node:path'
+import { basename, dirname, join, sep } from 'node:path'
 import { readMirrorRecord, type MirrorRecord } from './workspace.js'
 
 /** The mirror root every cloud Workspace lives under; a Session whose cwd
  * resolves inside it is bound to one cloud directory. */
 export function workspaceRoot(dshHome: string): string {
-  return `${dshHome}${sep}storages${sep}instabox${sep}workspaces`
+  // join drops a trailing separator, so a DSH_HOME of `C:\Users\me\.dsh\`
+  // still matches the realpath cwd the host records.
+  return join(dshHome, 'storages', 'instabox', 'workspaces')
 }
 
 /** True when `cwd` names a directory inside the cloud mirror root. Comparison

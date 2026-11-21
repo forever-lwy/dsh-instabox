@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises'
-import { posix as cloudPath, join } from 'node:path'
+import { posix as cloudPath, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { workspaceBindSchema, type WorkspaceBindRequest, type WorkspaceView } from './shared.js'
 
@@ -63,35 +63,39 @@ export async function bindMirror(root: string, request: WorkspaceBindRequest): P
   const remotePath = cloudPath.resolve('/', parsed.data.remotePath).replace(/\/+$/, '') || '/'
   if (!/^m_[A-Za-z0-9_-]+$/.test(machineId)) throw new WorkspaceError('机器 ID 无效。')
   const base = mirrorRootFor(root, machineId, remotePath)
-  const localPath = await freeMirrorPath(base, remotePath)
-  const metaPath = join(localPath, MIRROR_META_FILE)
-  let created = false
-  try {
-    await readFile(metaPath, 'utf8')
-  } catch (error: any) {
-    if (error.code !== 'ENOENT') throw error
-    created = true
-  }
-  await mkdir(localPath, {recursive: true, mode: 0o700})
+  const claimed = await claimMirror(base, remotePath)
+  if (!claimed.created) return {machineId, remotePath, localPath: claimed.localPath, created: false}
   const record: MirrorRecord = {kind: 'instabox', machineId, remotePath, createdAt: new Date().toISOString()}
-  const temp = join(localPath, `.${MIRROR_META_FILE}.${randomUUID()}.tmp`)
+  const metaPath = join(claimed.localPath, MIRROR_META_FILE)
+  const temp = join(claimed.localPath, `.${MIRROR_META_FILE}.${randomUUID()}.tmp`)
   try {
-    await writeFile(temp, JSON.stringify(record, null, 2) + '\n', {mode: 0o600})
+    await writeFile(temp, JSON.stringify(record, null, 2) + '\n', {mode: 0o600, flag: 'wx'})
     await rename(temp, metaPath)
-  } finally { await unlink(temp).catch(() => {}) }
-  return {machineId, remotePath, localPath, created}
+  } catch (error) {
+    await unlink(temp).catch(() => {})
+    throw error
+  }
+  return {machineId, remotePath, localPath: claimed.localPath, created: true}
 }
 
-/** Resolve the local mirror path for a cloud directory, reusing `base` when it
- * is free or already represents the same cloud path, and otherwise appending
- * the smallest free `-2`, `-3` suffix. Bounded so a hostile directory tree
- * cannot spin forever. */
-async function freeMirrorPath(base: string, remotePath: string): Promise<string> {
+/** Occupy one local mirror directory without letting a concurrent bind of a
+ * different cloud path reuse it. `mkdir` without `recursive` fails if the
+ * directory already exists, so exactly one caller owns a new directory; the
+ * other reads its meta file and either reuses a matching path or takes the
+ * next suffix. A directory that exists but has no meta yet is left alone. */
+async function claimMirror(base: string, remotePath: string): Promise<{localPath: string; created: boolean}> {
+  await mkdir(dirname(base), {recursive: true, mode: 0o700})
   for (let suffix = 1; suffix <= 100; suffix += 1) {
     const candidate = suffix === 1 ? base : `${base}-${suffix}`
-    const record = await readMirrorRecord(candidate)
-    if (!record) return candidate
-    if (record.remotePath === remotePath) return candidate
+    try {
+      await mkdir(candidate, {recursive: false, mode: 0o700})
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') throw error
+      const record = await readMirrorRecord(candidate)
+      if (record?.remotePath === remotePath) return {localPath: candidate, created: false}
+      continue
+    }
+    return {localPath: candidate, created: true}
   }
   throw new WorkspaceError('同名云机目录过多，请先删除本机不再使用的工作区。', 'mirror_name_exhausted')
 }
